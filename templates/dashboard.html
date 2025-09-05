@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xeinst Moderation Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        .post-card { transition: all 0.2s ease-in-out; }
+        .post-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .status-draft { @apply bg-yellow-50 border-yellow-200; }
+        .status-approved { @apply bg-green-50 border-green-200; }
+        .status-rejected { @apply bg-red-50 border-red-200; }
+        .status-posted { @apply bg-blue-50 border-blue-200; }
+        .similarity-high { @apply text-red-600 font-semibold; }
+        .similarity-medium { @apply text-yellow-600 font-semibold; }
+        .similarity-low { @apply text-green-600 font-semibold; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="dashboard()">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-4">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold text-gray-900">Xeinst Moderation Dashboard</h1>
+                    <div class="ml-4 flex space-x-2">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {{ stats.caps.remaining_hourly }}/{{ stats.caps.global_max_posts_per_hour }} hourly
+                        </span>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {{ stats.caps.max_posts_per_account_per_day }}/day per account
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <!-- Kill Switch -->
+                    <button 
+                        @click="toggleKillSwitch()"
+                        :class="stats.kill_switch ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'"
+                        class="px-4 py-2 rounded-md text-white font-medium transition-colors"
+                    >
+                        <span x-text="stats.kill_switch ? 'KILL SWITCH ON' : 'KILL SWITCH OFF'"></span>
+                    </button>
+                    
+                    <!-- Refresh Button -->
+                    <button 
+                        @click="refreshData()"
+                        class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md text-white font-medium transition-colors"
+                    >
+                        🔄 Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Stats Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="w-8 h-8 bg-yellow-100 rounded-md flex items-center justify-center">
+                            <span class="text-yellow-600 text-sm font-medium">📝</span>
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500">Drafts</p>
+                        <p class="text-2xl font-semibold text-gray-900">{{ stats.status_counts.draft or 0 }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="w-8 h-8 bg-green-100 rounded-md flex items-center justify-center">
+                            <span class="text-green-600 text-sm font-medium">✅</span>
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500">Approved</p>
+                        <p class="text-2xl font-semibold text-gray-900">{{ stats.status_counts.approved or 0 }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center">
+                            <span class="text-blue-600 text-sm font-medium">📤</span>
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500">Posted Today</p>
+                        <p class="text-2xl font-semibold text-gray-900">{{ stats.status_counts.posted or 0 }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="w-8 h-8 bg-red-100 rounded-md flex items-center justify-center">
+                            <span class="text-red-600 text-sm font-medium">❌</span>
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-500">Rejected</p>
+                        <p class="text-2xl font-semibold text-gray-900">{{ stats.status_counts.rejected or 0 }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters and Search -->
+        <div class="bg-white rounded-lg shadow mb-6 p-4">
+            <div class="flex flex-wrap items-center space-x-4">
+                <div class="flex items-center space-x-2">
+                    <label class="text-sm font-medium text-gray-700">Platform:</label>
+                    <select x-model="filters.platform" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+                        <option value="">All Platforms</option>
+                        <option value="reddit">Reddit</option>
+                        <option value="bluesky">Bluesky</option>
+                        <option value="twitter">Twitter</option>
+                        <option value="linkedin">LinkedIn</option>
+                    </select>
+                </div>
+                
+                <div class="flex items-center space-x-2">
+                    <label class="text-sm font-medium text-gray-700">Status:</label>
+                    <select x-model="filters.status" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+                        <option value="draft">Drafts</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="posted">Posted</option>
+                    </select>
+                </div>
+                
+                <div class="flex items-center space-x-2">
+                    <label class="text-sm font-medium text-gray-700">Search:</label>
+                    <input 
+                        type="text" 
+                        x-model="filters.search" 
+                        placeholder="Search content..."
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm w-64"
+                    >
+                </div>
+                
+                <button 
+                    @click="applyFilters()"
+                    class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md text-white text-sm font-medium transition-colors"
+                >
+                    Apply Filters
+                </button>
+            </div>
+        </div>
+
+        <!-- Posts Queue -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-lg font-medium text-gray-900">Content Queue</h2>
+                    <div class="flex space-x-2">
+                        <button 
+                            @click="bulkApprove()"
+                            class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-md text-white text-sm font-medium transition-colors"
+                        >
+                            Bulk Approve Selected
+                        </button>
+                        <button 
+                            @click="refreshData()"
+                            class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-md text-white text-sm font-medium transition-colors"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <input type="checkbox" @change="toggleAllPosts()" x-ref="selectAll">
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Similarity</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Flags</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="post in filteredPosts" :key="post.id">
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <input 
+                                        type="checkbox" 
+                                        :value="post.id" 
+                                        x-model="selectedPosts"
+                                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    >
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800" x-text="post.platform"></span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="max-w-xs">
+                                        <div class="text-sm font-medium text-gray-900 mb-1" x-text="post.title"></div>
+                                        <div class="text-sm text-gray-500 line-clamp-3" x-text="post.body.substring(0, 200) + (post.body.length > 200 ? '...' : '')"></div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span 
+                                        :class="{
+                                            'similarity-high': post.similarity_score > 0.8,
+                                            'similarity-medium': post.similarity_score > 0.5 && post.similarity_score <= 0.8,
+                                            'similarity-low': post.similarity_score <= 0.5
+                                        }"
+                                        x-text="post.similarity_score ? (post.similarity_score * 100).toFixed(1) + '%' : 'N/A'"
+                                    ></span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <template x-if="post.policy_flags && post.policy_flags.length > 0">
+                                        <div class="flex flex-wrap gap-1">
+                                            <template x-for="flag in post.policy_flags" :key="flag">
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800" x-text="flag"></span>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <template x-if="!post.policy_flags || post.policy_flags.length === 0">
+                                        <span class="text-green-600 text-sm">✓ Clean</span>
+                                    </template>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(post.created_at)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <div class="flex space-x-2">
+                                        <button 
+                                            @click="editPost(post)"
+                                            class="text-blue-600 hover:text-blue-900"
+                                        >
+                                            Edit
+                                        </button>
+                                        <button 
+                                            @click="approvePost(post.id)"
+                                            class="text-green-600 hover:text-green-900"
+                                        >
+                                            Approve
+                                        </button>
+                                        <button 
+                                            @click="rejectPost(post.id)"
+                                            class="text-red-600 hover:text-red-900"
+                                        >
+                                            Reject
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 mt-4 rounded-lg shadow">
+            <div class="flex-1 flex justify-between sm:hidden">
+                <button 
+                    @click="previousPage()"
+                    :disabled="currentPage === 1"
+                    class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                    Previous
+                </button>
+                <button 
+                    @click="nextPage()"
+                    :disabled="currentPage >= totalPages"
+                    class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                    Next
+                </button>
+            </div>
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm text-gray-700">
+                        Showing <span class="font-medium" x-text="(currentPage - 1) * pageSize + 1"></span> to 
+                        <span class="font-medium" x-text="Math.min(currentPage * pageSize, totalPosts)"></span> of 
+                        <span class="font-medium" x-text="totalPosts"></span> results
+                    </p>
+                </div>
+                <div>
+                    <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                        <button 
+                            @click="previousPage()"
+                            :disabled="currentPage === 1"
+                            class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            Previous
+                        </button>
+                        <template x-for="page in visiblePages" :key="page">
+                            <button 
+                                @click="goToPage(page)"
+                                :class="page === currentPage ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'"
+                                class="relative inline-flex items-center px-4 py-2 border text-sm font-medium"
+                                x-text="page"
+                            ></button>
+                        </template>
+                        <button 
+                            @click="nextPage()"
+                            :disabled="currentPage >= totalPages"
+                            class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            Next
+                        </button>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Edit Post Modal -->
+    <div x-show="showEditModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Edit Post</h3>
+                <form @submit.prevent="savePostEdit()">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Title</label>
+                            <input 
+                                type="text" 
+                                x-model="editingPost.title"
+                                class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            >
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Content</label>
+                            <textarea 
+                                x-model="editingPost.body"
+                                rows="6"
+                                class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            ></textarea>
+                            <div class="mt-1 text-sm text-gray-500">
+                                <span x-text="editingPost.body.length"></span> characters
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Media Path (optional)</label>
+                            <input 
+                                type="text" 
+                                x-model="editingPost.media_path"
+                                class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            >
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button 
+                            type="button"
+                            @click="showEditModal = false"
+                            class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-md text-gray-700 font-medium transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            type="submit"
+                            class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md text-white font-medium transition-colors"
+                        >
+                            Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approve Post Modal -->
+    <div x-show="showApproveModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Approve Post</h3>
+                <form @submit.prevent="confirmApprovePost()">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Schedule (optional)</label>
+                            <input 
+                                type="datetime-local" 
+                                x-model="approveData.scheduled_at"
+                                class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            >
+                            <p class="mt-1 text-sm text-gray-500">Leave empty to post immediately</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Notes (optional)</label>
+                            <textarea 
+                                x-model="approveData.notes"
+                                rows="3"
+                                class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Any notes about this approval..."
+                            ></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button 
+                            type="button"
+                            @click="showApproveModal = false"
+                            class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-md text-gray-700 font-medium transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            type="submit"
+                            class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-md text-white font-medium transition-colors"
+                        >
+                            Approve
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reject Post Modal -->
+    <div x-show="showRejectModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Reject Post</h3>
+                <form @submit.prevent="confirmRejectPost()">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Reason for rejection</label>
+                            <textarea 
+                                x-model="rejectData.reason"
+                                rows="4"
+                                class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Please provide a reason for rejecting this post..."
+                                required
+                            ></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button 
+                            type="button"
+                            @click="showRejectModal = false"
+                            class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-md text-gray-700 font-medium transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            type="submit"
+                            class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-md text-white font-medium transition-colors"
+                        >
+                            Reject
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function dashboard() {
+            return {
+                posts: {{ posts | tojson }},
+                stats: {{ stats | tojson }},
+                filters: {
+                    platform: '',
+                    status: 'draft',
+                    search: ''
+                },
+                selectedPosts: [],
+                currentPage: 1,
+                pageSize: 20,
+                showEditModal: false,
+                showApproveModal: false,
+                showRejectModal: false,
+                editingPost: {},
+                approveData: {
+                    post_id: null,
+                    scheduled_at: '',
+                    notes: ''
+                },
+                rejectData: {
+                    post_id: null,
+                    reason: ''
+                },
+
+                get filteredPosts() {
+                    let filtered = this.posts;
+                    
+                    if (this.filters.platform) {
+                        filtered = filtered.filter(p => p.platform === this.filters.platform);
+                    }
+                    
+                    if (this.filters.status) {
+                        filtered = filtered.filter(p => p.status === this.filters.status);
+                    }
+                    
+                    if (this.filters.search) {
+                        const search = this.filters.search.toLowerCase();
+                        filtered = filtered.filter(p => 
+                            p.title.toLowerCase().includes(search) || 
+                            p.body.toLowerCase().includes(search)
+                        );
+                    }
+                    
+                    return filtered;
+                },
+
+                get totalPosts() {
+                    return this.filteredPosts.length;
+                },
+
+                get totalPages() {
+                    return Math.ceil(this.totalPosts / this.pageSize);
+                },
+
+                get visiblePages() {
+                    const pages = [];
+                    const start = Math.max(1, this.currentPage - 2);
+                    const end = Math.min(this.totalPages, this.currentPage + 2);
+                    
+                    for (let i = start; i <= end; i++) {
+                        pages.push(i);
+                    }
+                    
+                    return pages;
+                },
+
+                applyFilters() {
+                    this.currentPage = 1;
+                },
+
+                toggleAllPosts() {
+                    if (this.$refs.selectAll.checked) {
+                        this.selectedPosts = this.filteredPosts.map(p => p.id);
+                    } else {
+                        this.selectedPosts = [];
+                    }
+                },
+
+                editPost(post) {
+                    this.editingPost = { ...post };
+                    this.showEditModal = true;
+                },
+
+                async savePostEdit() {
+                    try {
+                        const response = await fetch(`/api/posts/${this.editingPost.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: new URLSearchParams({
+                                title: this.editingPost.title,
+                                body: this.editingPost.body,
+                                media_path: this.editingPost.media_path || ''
+                            })
+                        });
+
+                        if (response.ok) {
+                            // Update the post in the local array
+                            const index = this.posts.findIndex(p => p.id === this.editingPost.id);
+                            if (index !== -1) {
+                                this.posts[index] = { ...this.posts[index], ...this.editingPost };
+                            }
+                            
+                            this.showEditModal = false;
+                            this.showNotification('Post updated successfully', 'success');
+                        } else {
+                            throw new Error('Failed to update post');
+                        }
+                    } catch (error) {
+                        console.error('Error updating post:', error);
+                        this.showNotification('Failed to update post', 'error');
+                    }
+                },
+
+                approvePost(postId) {
+                    this.approveData.post_id = postId;
+                    this.showApproveModal = true;
+                },
+
+                async confirmApprovePost() {
+                    try {
+                        const response = await fetch(`/api/posts/${this.approveData.post_id}/approve`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: new URLSearchParams({
+                                scheduled_at: this.approveData.scheduled_at || '',
+                                notes: this.approveData.notes || ''
+                            })
+                        });
+
+                        if (response.ok) {
+                            // Update the post status
+                            const index = this.posts.findIndex(p => p.id === this.approveData.post_id);
+                            if (index !== -1) {
+                                this.posts[index].status = 'approved';
+                                if (this.approveData.scheduled_at) {
+                                    this.posts[index].scheduled_at = this.approveData.scheduled_at;
+                                }
+                            }
+                            
+                            this.showApproveModal = false;
+                            this.approveData = { post_id: null, scheduled_at: '', notes: '' };
+                            this.showNotification('Post approved successfully', 'success');
+                            this.refreshData();
+                        } else {
+                            throw new Error('Failed to approve post');
+                        }
+                    } catch (error) {
+                        console.error('Error approving post:', error);
+                        this.showNotification('Failed to approve post', 'error');
+                    }
+                },
+
+                rejectPost(postId) {
+                    this.rejectData.post_id = postId;
+                    this.showRejectModal = true;
+                },
+
+                async confirmRejectPost() {
+                    try {
+                        const response = await fetch(`/api/posts/${this.rejectData.post_id}/reject`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: new URLSearchParams({
+                                reason: this.rejectData.reason
+                            })
+                        });
+
+                        if (response.ok) {
+                            // Update the post status
+                            const index = this.posts.findIndex(p => p.id === this.rejectData.post_id);
+                            if (index !== -1) {
+                                this.posts[index].status = 'rejected';
+                            }
+                            
+                            this.showRejectModal = false;
+                            this.rejectData = { post_id: null, reason: '' };
+                            this.showNotification('Post rejected successfully', 'success');
+                            this.refreshData();
+                        } else {
+                            throw new Error('Failed to reject post');
+                        }
+                    } catch (error) {
+                        console.error('Error rejecting post:', error);
+                        this.showNotification('Failed to reject post', 'error');
+                    }
+                },
+
+                async bulkApprove() {
+                    if (this.selectedPosts.length === 0) {
+                        this.showNotification('No posts selected', 'warning');
+                        return;
+                    }
+
+                    if (!confirm(`Are you sure you want to approve ${this.selectedPosts.length} posts?`)) {
+                        return;
+                    }
+
+                    try {
+                        let successCount = 0;
+                        for (const postId of this.selectedPosts) {
+                            const response = await fetch(`/api/posts/${postId}/approve`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded',
+                                },
+                                body: new URLSearchParams({
+                                    notes: 'Bulk approved'
+                                })
+                            });
+
+                            if (response.ok) {
+                                successCount++;
+                            }
+                        }
+
+                        this.selectedPosts = [];
+                        this.showNotification(`${successCount} posts approved successfully`, 'success');
+                        this.refreshData();
+                    } catch (error) {
+                        console.error('Error bulk approving posts:', error);
+                        this.showNotification('Failed to bulk approve posts', 'error');
+                    }
+                },
+
+                async toggleKillSwitch() {
+                    try {
+                        const response = await fetch('/api/settings/kill-switch', {
+                            method: 'POST'
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.stats.kill_switch = data.kill_switch;
+                            this.showNotification(
+                                `Kill switch ${data.kill_switch ? 'enabled' : 'disabled'}`, 
+                                data.kill_switch ? 'warning' : 'success'
+                            );
+                        } else {
+                            throw new Error('Failed to toggle kill switch');
+                        }
+                    } catch (error) {
+                        console.error('Error toggling kill switch:', error);
+                        this.showNotification('Failed to toggle kill switch', 'error');
+                    }
+                },
+
+                async refreshData() {
+                    try {
+                        const [postsResponse, statsResponse] = await Promise.all([
+                            fetch('/api/queue?status=draft&limit=100'),
+                            fetch('/api/stats')
+                        ]);
+
+                        if (postsResponse.ok && statsResponse.ok) {
+                            const postsData = await postsResponse.json();
+                            const statsData = await statsResponse.json();
+                            
+                            this.posts = postsData.posts;
+                            this.stats = statsData;
+                            
+                            this.showNotification('Data refreshed successfully', 'success');
+                        } else {
+                            throw new Error('Failed to refresh data');
+                        }
+                    } catch (error) {
+                        console.error('Error refreshing data:', error);
+                        this.showNotification('Failed to refresh data', 'error');
+                    }
+                },
+
+                previousPage() {
+                    if (this.currentPage > 1) {
+                        this.currentPage--;
+                    }
+                },
+
+                nextPage() {
+                    if (this.currentPage < this.totalPages) {
+                        this.currentPage++;
+                    }
+                },
+
+                goToPage(page) {
+                    this.currentPage = page;
+                },
+
+                formatDate(dateString) {
+                    if (!dateString) return 'N/A';
+                    const date = new Date(dateString);
+                    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                },
+
+                showNotification(message, type = 'info') {
+                    // Simple notification - you can enhance this with a proper toast library
+                    alert(`${type.toUpperCase()}: ${message}`);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

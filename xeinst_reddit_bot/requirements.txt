@@ -1,0 +1,25 @@
+# Core dependencies
+praw==7.7.1
+python-dotenv==1.0.0
+pyyaml==6.0.1
+rich==13.7.0
+apscheduler==3.10.4
+requests==2.31.0
+typer==0.9.0
+
+# Web dashboard
+flask==3.0.0
+flask-socketio==5.3.6
+
+# Database
+sqlite-utils==3.35
+
+# Optional development dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+black==23.12.1
+flake8==6.1.0
+watchdog==3.0.0
+
+# Additional utilities
+python-dateutil==2.8.2

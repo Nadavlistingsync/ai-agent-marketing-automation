@@ -1,0 +1,144 @@
+# Xeinst Reddit Bot Configuration
+
+# Target Subreddits
+subreddits:
+  - name: "Entrepreneur"
+    subreddit: "Entrepreneur"
+    cooldown_hours: 24
+    karma_min: 100
+    allow_links: false
+    posting_hours: [9, 10, 11, 14, 15, 16, 17]  # 9 AM - 11 AM, 2 PM - 5 PM EST
+    auto_approve: false
+    
+  - name: "Startups"
+    subreddit: "startups"
+    cooldown_hours: 24
+    karma_min: 50
+    allow_links: false
+    posting_hours: [9, 10, 11, 14, 15, 16, 17]
+    auto_approve: false
+    
+  - name: "SideProject"
+    subreddit: "SideProject"
+    cooldown_hours: 12
+    karma_min: 25
+    allow_links: true
+    posting_hours: [10, 11, 14, 15, 16]
+    auto_approve: false
+    
+  - name: "Automate"
+    subreddit: "automate"
+    cooldown_hours: 12
+    karma_min: 25
+    allow_links: true
+    posting_hours: [9, 10, 11, 14, 15, 16, 17]
+    auto_approve: false
+    
+  - name: "LowCode"
+    subreddit: "lowcode"
+    cooldown_hours: 12
+    karma_min: 25
+    allow_links: true
+    posting_hours: [10, 11, 14, 15, 16]
+    auto_approve: false
+    
+  - name: "NoCode"
+    subreddit: "nocode"
+    cooldown_hours: 12
+    karma_min: 25
+    allow_links: true
+    posting_hours: [10, 11, 14, 15, 16]
+    auto_approve: false
+    
+  - name: "SelfHosted"
+    subreddit: "selfhosted"
+    cooldown_hours: 12
+    karma_min: 25
+    allow_links: true
+    posting_hours: [9, 10, 11, 14, 15, 16, 17]
+    auto_approve: false
+    
+  - name: "DataScience"
+    subreddit: "datascience"
+    cooldown_hours: 24
+    karma_min: 100
+    allow_links: false
+    posting_hours: [10, 11, 14, 15, 16]
+    auto_approve: false
+    
+  - name: "MarketingAutomation"
+    subreddit: "marketingautomation"
+    cooldown_hours: 12
+    karma_min: 25
+    allow_links: true
+    posting_hours: [9, 10, 11, 14, 15, 16, 17]
+    auto_approve: false
+
+# Target Keywords
+keywords:
+  - "automation"
+  - "Zapier"
+  - "n8n"
+  - "Make.com"
+  - "webhook"
+  - "agent marketplace"
+  - "AI agent"
+  - "cold outreach"
+  - "lead gen"
+  - "workflow automation"
+  - "business process"
+  - "efficiency tools"
+  - "integration platform"
+  - "API automation"
+  - "no-code tools"
+
+# Content Generation Settings
+content:
+  max_length_default: 120
+  max_length_quick: 60
+  min_length: 20
+  include_xeinst_only_when_asked: true
+  xeinst_mention: "If helpful, here's a directory I'm building: Xeinst (ai agent marketplace)."
+  
+# Moderation Settings
+moderation:
+  toxicity_threshold: 0.7
+  repetition_threshold: 0.3
+  blacklisted_words:
+    - "spam"
+    - "scam"
+    - "click here"
+    - "buy now"
+    - "limited time"
+    - "act fast"
+    - "don't miss out"
+    
+# Rate Limiting
+rate_limits:
+  global_cooldown_min: 90
+  global_cooldown_max: 150
+  sub_cooldown_hours: 12
+  max_posts_per_day: 10
+  max_comments_per_day: 50
+  max_actions_per_hour: 20
+  
+# Scheduling
+scheduler:
+  monitor_interval_minutes: 15
+  post_interval_minutes: 30
+  health_check_interval_hours: 1
+  daily_report_hour: 9  # 9 AM EST
+  
+# Logging
+logging:
+  level: "INFO"
+  file: "logs/xeinst_bot.log"
+  max_size_mb: 10
+  backup_count: 5
+  
+# Safety
+safety:
+  shadowban_check_interval_hours: 6
+  mod_feedback_threshold: 2  # Auto-disable sub after 2 negative mod interactions
+  auto_disable_on_negative_mod: true
+  respect_no_promo_flairs: true
